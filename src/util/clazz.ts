@@ -77,7 +77,7 @@ export interface ExtendableConstructor {
 export function enableClassExtend(rootClz: ExtendableConstructor, mandatoryMethods?: string[]): void {
 
     rootClz.$constructor = rootClz; // FIXME: not necessary?
-
+    const __DEV__ = true;
     rootClz.extend = function (proto: Dictionary<any>) {
         if (__DEV__) {
             zrUtil.each(mandatoryMethods, function (method) {

@@ -30,10 +30,10 @@ use(installLabelLayout);
 
 
 // Export necessary types
-export {ZRColor as Color, Payload} from '../util/types';
-export {LinearGradientObject} from 'zrender/src/graphic/LinearGradient';
-export {RadialGradientObject} from 'zrender/src/graphic/RadialGradient';
-export {PatternObject, ImagePatternObject, SVGPatternObject} from 'zrender/src/graphic/Pattern';
+export type {ZRColor as Color, Payload} from '../util/types';
+export type {LinearGradientObject} from 'zrender/src/graphic/LinearGradient';
+export type {RadialGradientObject} from 'zrender/src/graphic/RadialGradient';
+export type {PatternObject, ImagePatternObject, SVGPatternObject} from 'zrender/src/graphic/Pattern';
 
 // ComposeOption
 import type { ComponentOption, ECBasicOption as EChartsCoreOption } from '../util/types';
@@ -44,9 +44,9 @@ import type { AngleAxisOption, RadiusAxisOption } from '../coord/polar/AxisModel
 import type { ParallelAxisOption } from '../coord/parallel/AxisModel';
 
 
-export {EChartsType as ECharts} from '../core/echarts';
+export type {EChartsType as ECharts} from '../core/echarts';
 
-export {EChartsCoreOption};
+export type {EChartsCoreOption};
 
 // type SeriesSubComponentsTypes = 'markPoint' | 'markLine' | 'markArea' | 'tooltip';
 // type InjectSeriesSubComponents<OptionUnion extends ComponentOption, Injected> =

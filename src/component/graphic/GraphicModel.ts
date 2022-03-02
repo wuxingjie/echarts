@@ -182,8 +182,12 @@ type GraphicExtraElementInfo = Dictionary<unknown>;
 export type ElementMap = zrUtil.HashMap<Element, string>;
 
 
-export type GraphicComponentLooseOption = (GraphicComponentOption | GraphicComponentElementOption) & {
+type GraphicComponentLooseOption = (GraphicComponentOption | GraphicComponentElementOption) & {
     mainType?: 'graphic';
+};
+
+export type {
+    GraphicComponentLooseOption
 };
 
 export interface GraphicComponentOption extends ComponentOption, AnimationOptionMixin {

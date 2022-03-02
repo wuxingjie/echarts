@@ -65,7 +65,7 @@ export {install as DatasetComponent} from '../component/dataset/install';
 
 
 
-export {
+export type {
     GridComponentOption,
 
     PolarComponentOption,

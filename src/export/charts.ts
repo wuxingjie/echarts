@@ -73,7 +73,7 @@ export {install as CustomChart} from '../chart/custom/install';
 // export {SunburstSeriesOption} from '../chart/sunburst/SunburstSeries';
 // export {CustomSeriesOption} from '../chart/custom/install';
 
-export {
+export type {
     LineSeriesOption,
     BarSeriesOption,
     ScatterSeriesOption,
