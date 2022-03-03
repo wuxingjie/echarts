@@ -44,3 +44,4 @@ export default {
 // TODO remove
 import {installLabelLayout} from './label/installLabelLayout';
 use(installLabelLayout);
+

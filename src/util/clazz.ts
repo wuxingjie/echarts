@@ -25,6 +25,9 @@ const TYPE_DELIMITER = '.';
 const IS_CONTAINER = '___EC__COMPONENT__CONTAINER___' as const;
 const IS_EXTENDED_CLASS = '___EC__EXTENDED_CLASS___' as const;
 
+// @ts-ignore
+window.__DEV__=true
+
 /**
  * Notice, parseClassType('') should returns {main: '', sub: ''}
  * @public
@@ -77,7 +80,6 @@ export interface ExtendableConstructor {
 export function enableClassExtend(rootClz: ExtendableConstructor, mandatoryMethods?: string[]): void {
 
     rootClz.$constructor = rootClz; // FIXME: not necessary?
-    const __DEV__ = true;
     rootClz.extend = function (proto: Dictionary<any>) {
         if (__DEV__) {
             zrUtil.each(mandatoryMethods, function (method) {
