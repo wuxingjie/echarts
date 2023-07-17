@@ -351,7 +351,14 @@ export type TooltipOrderMode = 'valueAsc' | 'valueDesc' | 'seriesAsc' | 'seriesD
 // Ordinal/category data will be parsed to its index if possible, otherwise
 // keep its original string in list._storage.
 // Check `convertValue` for more details.
+export type Hierarchy<T> = {
+    value: T,
+    parent?: Hierarchy<T>,
+    children?: Hierarchy<T>[]
+};
 export type OrdinalRawValue = string | number;
+export type HierarchyOrdinalRawValue = Hierarchy<OrdinalRawValue>;
+export type AllOrdinalRawValue = OrdinalRawValue | HierarchyOrdinalRawValue;
 export type OrdinalNumber = number; // The number mapped from each OrdinalRawValue.
 
 /**

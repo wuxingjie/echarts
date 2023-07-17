@@ -17,7 +17,17 @@
 * under the License.
 */
 
-import {retrieve, defaults, extend, each, isObject, map, isString, isNumber, isFunction} from 'zrender/src/core/util';
+import {
+    retrieve,
+    defaults,
+    extend,
+    each,
+    isObject,
+    map,
+    isString,
+    isNumber,
+    isFunction
+} from 'zrender/src/core/util';
 import * as graphic from '../../util/graphic';
 import {getECData} from '../../util/innerStore';
 import {createTextStyle} from '../../label/labelStyle';
@@ -28,7 +38,7 @@ import * as matrixUtil from 'zrender/src/core/matrix';
 import {applyTransform as v2ApplyTransform} from 'zrender/src/core/vector';
 import {shouldShowAllLabels} from '../../coord/axisHelper';
 import { AxisBaseModel } from '../../coord/AxisBaseModel';
-import { ZRTextVerticalAlign, ZRTextAlign, ECElement, ColorString } from '../../util/types';
+import {ZRTextVerticalAlign, ZRTextAlign, ECElement, ColorString} from '../../util/types';
 import { AxisBaseOption } from '../../coord/axisCommonTypes';
 import Element from 'zrender/src/Element';
 import { PathStyleProps } from 'zrender/src/graphic/Path';
@@ -96,7 +106,8 @@ export interface AxisBuilderCfg {
 }
 
 interface TickCoord {
-    coord: number
+    coord: number,
+    span?: number,
     tickValue?: number
 }
 
@@ -614,13 +625,13 @@ function createTicks(
     const tickEls = [];
     const pt1: number[] = [];
     const pt2: number[] = [];
-    for (let i = 0; i < ticksCoords.length; i++) {
-        const tickCoord = ticksCoords[i].coord;
+    for (const element of ticksCoords) {
+        const tickCoord = element.coord;
 
         pt1[0] = tickCoord;
         pt1[1] = 0;
         pt2[0] = tickCoord;
-        pt2[1] = tickEndCoord;
+        pt2[1] = tickEndCoord + (element.span ?? 0) * 30;
 
         if (tickTransform) {
             v2ApplyTransform(pt1, pt1, tickTransform);
@@ -640,7 +651,7 @@ function createTicks(
             silent: true
         });
         graphic.subPixelOptimizeLine(tickEl.shape, tickEl.style.lineWidth);
-        tickEl.anid = anidPrefix + '_' + ticksCoords[i].tickValue;
+        tickEl.anid = anidPrefix + '_' + element.tickValue;
         tickEls.push(tickEl);
     }
     return tickEls;
@@ -733,15 +744,12 @@ function buildAxisLabel(
 ) {
     const axis = axisModel.axis;
     const show = retrieve(opt.axisLabelShow, axisModel.get(['axisLabel', 'show']));
-
     if (!show || axis.scale.isBlank()) {
         return;
     }
-
     const labelModel = axisModel.getModel('axisLabel');
     const labelMargin = labelModel.get('margin');
     const labels = axis.getViewLabels();
-
     // Special label rotate.
     const labelRotation = (
         retrieve(opt.labelRotate, labelModel.get('rotate')) || 0
@@ -753,6 +761,53 @@ function buildAxisLabel(
     const labelEls: graphic.Text[] = [];
     const silent = AxisBuilder.isLabelSilent(axisModel);
     const triggerEvent = axisModel.get('triggerEvent');
+
+    // category 才渲染
+    if (axis.type === 'category' && axis.scale instanceof OrdinalScale) {
+        const ordinalMeta = axis.scale.getOrdinalMeta();
+        const tree = ordinalMeta.hierarchyCategories;
+        const treeDepth = tree.getDepth();
+        tree.accept(n => {
+            const formattedLabel = n.value;
+            const rawLabel = formattedLabel;
+
+            const itemLabelModel = labelModel;
+
+            const textColor = itemLabelModel.getTextColor() as AxisBaseOption['axisLabel']['color']
+                || axisModel.get(['axisLine', 'lineStyle', 'color']);
+            const extent = n.getExtent();
+            const tickCoordStart = axis.dataToCoord(extent[0]);
+            const tickCoordEnd = axis.dataToCoord(extent[1]);
+
+            const textEl = new graphic.Text({
+                x: tickCoordStart + (tickCoordEnd - tickCoordStart) / 2,
+                y: opt.labelOffset + opt.labelDirection * labelMargin + (treeDepth - n.level) * 16,
+                rotation: labelLayout.rotation,
+                silent: silent,
+                z2: 10,
+                style: createTextStyle(itemLabelModel, {
+                    text: formattedLabel + '',
+                    align: itemLabelModel.getShallow('align', true)
+                        || labelLayout.textAlign,
+                    verticalAlign: itemLabelModel.getShallow('verticalAlign', true)
+                        || itemLabelModel.getShallow('baseline', true)
+                        || labelLayout.textVerticalAlign,
+                    fill: isFunction(textColor)
+                        ? textColor(rawLabel)
+                        : textColor as string
+                })
+            });
+            textEl.anid = 'label_' + tickCoordStart + '_' + tickCoordEnd;
+            transformGroup.add(textEl);
+            textEl.updateTransform();
+
+            labelEls.push(textEl);
+            group.add(textEl);
+
+            textEl.decomposeTransform();
+        });
+        return;
+    }
 
     each(labels, function (labelItem, index) {
         const tickValue = axis.scale.type === 'ordinal'

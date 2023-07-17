@@ -30,11 +30,13 @@ import OrdinalScale from '../scale/Ordinal';
 import Model from '../model/Model';
 import { AxisBaseOption, CategoryAxisBaseOption, OptionAxisType } from './axisCommonTypes';
 import { AxisBaseModel } from './AxisBaseModel';
+import {Tree} from '../data/OrdinalMeta';
 
 const NORMALIZED_EXTENT = [0, 1] as [number, number];
 
 interface TickCoord {
     coord: number;
+    span?: number;
     // That is `scaleTick.value`.
     tickValue?: ScaleTick['value'];
 }
@@ -171,11 +173,26 @@ class Axis {
         clamp?: boolean
     }): TickCoord[] {
         opt = opt || {};
-
         const tickModel = opt.tickModel || this.getTickModel();
         const result = createAxisTicks(this, tickModel as AxisBaseModel);
         const ticks = result.ticks;
-
+        let tree: Tree;
+        const spans: number[] = [];
+        if (this.type === 'category' && this.scale instanceof OrdinalScale) {
+            const ordinalMeta = this.scale.getOrdinalMeta();
+            tree = ordinalMeta.hierarchyCategories;
+            tree.accept(n => {
+                if (!n.isLeaf()) {
+                    const firstLeaf = n.firstLeafChild();
+                    if (firstLeaf) {
+                        spans[firstLeaf.leafIndex] = firstLeaf.level;
+                    }
+                }
+                else {
+                    spans[n.leafIndex] = 0;
+                }
+            }, true);
+        }
         const ticksCoords = map(ticks, function (tickVal) {
             return {
                 coord: this.dataToCoord(
@@ -183,6 +200,7 @@ class Axis {
                         ? (this.scale as OrdinalScale).getRawOrdinalNumber(tickVal)
                         : tickVal
                 ),
+                span: spans[tickVal] ?? 0,
                 tickValue: tickVal
             };
         }, this);
@@ -190,7 +208,7 @@ class Axis {
         const alignWithLabel = tickModel.get('alignWithLabel');
 
         fixOnBandTicksCoords(
-            this, ticksCoords, alignWithLabel, opt.clamp
+            this, ticksCoords, alignWithLabel, opt.clamp, tree?.lastLeafChild()?.level ?? 0
         );
 
         return ticksCoords;
@@ -289,7 +307,7 @@ function fixExtentWithBands(extent: [number, number], nTick: number): void {
 // to displayed labels. (So we should not use `getBandWidth` in this
 // case).
 function fixOnBandTicksCoords(
-    axis: Axis, ticksCoords: TickCoord[], alignWithLabel: boolean, clamp: boolean
+    axis: Axis, ticksCoords: TickCoord[], alignWithLabel: boolean, clamp: boolean, span: number
 ) {
     const ticksLen = ticksCoords.length;
 
@@ -315,7 +333,7 @@ function fixOnBandTicksCoords(
         const dataExtent = axis.scale.getExtent();
         diffSize = 1 + dataExtent[1] - ticksCoords[ticksLen - 1].tickValue;
 
-        last = {coord: ticksCoords[ticksLen - 1].coord + shift * diffSize};
+        last = {coord: ticksCoords[ticksLen - 1].coord + shift * diffSize, span: span};
 
         ticksCoords.push(last);
     }

@@ -17,15 +17,159 @@
 * under the License.
 */
 
-import {createHashMap, isObject, map, HashMap, isString} from 'zrender/src/core/util';
+import {createHashMap, isObject, map, HashMap, isString, isNumber} from 'zrender/src/core/util';
 import Model from '../model/Model';
-import { OrdinalNumber, OrdinalRawValue } from '../util/types';
+import {
+    HierarchyOrdinalRawValue,
+    OrdinalNumber,
+    OrdinalRawValue
+} from '../util/types';
+
+type HierarchyOrdinalRawValueWithIndex = HierarchyOrdinalRawValue & {
+    // leaf index
+    index?: number;
+};
+
+export class Node implements HierarchyOrdinalRawValue {
+    children?: Node[];
+    parent?: Node;
+    readonly level: number;
+    readonly value: string | number;
+    // all leaf node index
+    readonly leafIndex: number = NaN;
+
+    constructor(tree: Tree, rawValue: HierarchyOrdinalRawValueWithIndex, level: number) {
+        this.children =
+            rawValue.children?.map(c => new Node(tree, c, level + 1));
+        this.children?.forEach(c => {
+            c.parent = this;
+        });
+        this.level = level;
+        this.value = rawValue.value;
+        if (isNumber(rawValue.index)) {
+            this.leafIndex = rawValue.index;
+        }
+        if (this.isLeaf()) {
+            tree.leafNodes.push(this);
+        }
+    }
+
+    isLeaf(): boolean {
+        return !this.children || this.children.length === 0;
+    }
+
+    accept(visitor: (n: Node) => void, depthFirst = false): void {
+        if (depthFirst) {
+            if (this.children) {
+                this.children.forEach(c => c.accept(visitor, depthFirst));
+            }
+            visitor(this);
+        }
+        else {
+            visitor(this);
+            if (this.children) {
+                this.children.forEach(c => c.accept(visitor, depthFirst));
+            }
+        }
+    }
+
+    firstChild(): Node | undefined {
+        return this.children && this.children[0];
+    }
+
+    // 向下获取第一个子节点,直到叶子节点
+    firstLeafChild(): Node | undefined {
+        if (this.isLeaf()) {
+            return this;
+        }
+        else {
+            return this.firstChild()?.firstLeafChild();
+        }
+    }
+
+    lastChild(): Node | undefined {
+        return this.children && this.children[this.children.length - 1];
+    }
+
+    lastLeafChild(): Node | undefined {
+        if (this.isLeaf()) {
+            return this;
+        }
+        else {
+            return this.lastChild()?.lastLeafChild();
+        }
+    }
+
+    startExtent(): number {
+        if (this.isLeaf()) {
+            return this.leafIndex;
+        }
+        else {
+            return this.firstChild()?.startExtent();
+        }
+    }
+
+    lastExtent(): number {
+        if (this.isLeaf()) {
+            return this.leafIndex;
+        }
+        else {
+            return this.lastChild()?.lastExtent();
+        }
+    }
+
+    getExtent(): [number, number] {
+        if (!this.children) {
+            return [this.leafIndex, this.leafIndex];
+        }
+        else {
+            return [this.startExtent(), this.lastExtent()];
+        }
+    }
+
+    getMaxDepth(): number {
+        if (this.isLeaf()) {
+            return this.level;
+        }
+        else {
+            return this.firstChild()?.getMaxDepth();
+        }
+    }
+}
+
+export class Tree {
+    private rootNodes: Node[] = [];
+    // use map maybe
+    public leafNodes: Node[] = [];
+
+    appendChild(value: HierarchyOrdinalRawValueWithIndex): void {
+        this.rootNodes.push(new Node(this, value, 0));
+    }
+
+    accept(visitor: (n: Node) => void, depthFirst = false): void {
+        this.rootNodes.forEach(c => c.accept(visitor, depthFirst));
+    }
+
+    getDepth(): number {
+        return this.rootNodes[0]?.getMaxDepth() ?? 0;
+    }
+
+    getLeafByIndex(index: number): Node | undefined {
+        return this.leafNodes[index];
+    }
+
+    lastLeafChild(): Node | undefined {
+        return this.rootNodes[this.rootNodes.length - 1]?.lastLeafChild();
+    }
+
+}
 
 let uidBase = 0;
-
 class OrdinalMeta {
 
     readonly categories: OrdinalRawValue[];
+
+    readonly hierarchyCategories: Tree;
 
     private _needCollect: boolean;
 
@@ -38,10 +182,12 @@ class OrdinalMeta {
 
     constructor(opt: {
         categories?: OrdinalRawValue[],
-        needCollect?: boolean
-        deduplication?: boolean
+        needCollect?: boolean,
+        deduplication?: boolean,
+        hierarchyCategories?: Tree
     }) {
         this.categories = opt.categories || [];
+        this.hierarchyCategories = opt.hierarchyCategories;
         this._needCollect = opt.needCollect;
         this._deduplication = opt.deduplication;
         this.uid = ++uidBase;
@@ -50,13 +196,47 @@ class OrdinalMeta {
     static createByAxisModel(axisModel: Model): OrdinalMeta {
         const option = axisModel.option;
         const data = option.data;
+        const hierarchyAxis = option.hierarchyAxis;
         const categories = data && map(data, getName);
-
+        let hierarchyCategories: Tree;
+        if (hierarchyAxis) {
+            const deepest = (categories: HierarchyOrdinalRawValue[]): HierarchyOrdinalRawValue[] => {
+                return categories.reduce((list, category) => {
+                        if (isObject(category)) {
+                            if (!category.children) {
+                                list.push(category);
+                            }
+                            else {
+                                list.push(...deepest(category.children));
+                            }
+                        }
+                        else {
+                            list.push(category);
+                        }
+                        return list;
+                    },
+                    []);
+            };
+            const deepestRawValue = deepest(data);
+            deepestRawValue.forEach((v, i) => {
+                (v as HierarchyOrdinalRawValueWithIndex).index = i;
+            });
+            const hierarchyCategories = new Tree();
+            (data as HierarchyOrdinalRawValue[]).forEach(v => hierarchyCategories.appendChild(v));
+            return new OrdinalMeta({
+                categories: deepestRawValue.map(v => v.value),
+                needCollect: !categories,
+                // deduplication is default in axis.
+                deduplication: option.dedplication !== false,
+                hierarchyCategories
+            });
+        }
         return new OrdinalMeta({
             categories: categories,
             needCollect: !categories,
             // deduplication is default in axis.
-            deduplication: option.dedplication !== false
+            deduplication: option.dedplication !== false,
+            hierarchyCategories
         });
     };
 
@@ -106,7 +286,7 @@ class OrdinalMeta {
                 // @ts-ignore
                 map.set(category, index);
             }
-            else {
+        else {
                 index = NaN;
             }
         }
@@ -122,8 +302,8 @@ class OrdinalMeta {
     }
 }
 
-function getName(obj: any): string {
-    if (isObject(obj) && obj.value != null) {
+function getName(obj: any): OrdinalRawValue {
+    if (isObject(obj) && obj.value) {
         return obj.value;
     }
     else {
